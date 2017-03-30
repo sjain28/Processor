@@ -1,5 +1,5 @@
 module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, lcd_data,*/ dmem_data_in, dmem_address, imem_out, 
-									PC_out, take_target, take_rd, PC_alt, take_alt, PC_in, PC_incr, F_D_out, op_x, br_x, sw_x, jr_x, j_x, jal_x, bne_x, blt_x, bex_x);
+								   alu1out_M, target_M, regB_M, opcode_M, rd_addr_M, overflow_M, op_x, F_D_out, FD_reset, DX_reset);
 
 	input 			clock, reset/*, ps2_key_pressed*/;
 	//input 	[7:0]	ps2_out;
@@ -7,21 +7,20 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	//output 			lcd_write;
 	//output 	[31:0] 	lcd_data;
 	
-	// GRADER OUTPUTS - YOU MUST CONNECT TO YOUR DMEM
 	output 	[31:0] 	dmem_data_in;
 	output	[11:0]	dmem_address;
 	
 	
-	//FETCH STAGE: PC, IMEM, F/D register
+/////FETCH STAGE: PC, IMEM, F/D register//////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//TODO: Hook up imem
 	//TODO: Add logic to deal with setx; need to do this in all stages
 	
-	output[31:0] PC_in, PC_incr; //PC_incr = PC + 1
-	output [31:0] PC_out;
+	wire[31:0] PC_in, PC_incr, PC_out;
+	output[31:0] F_D_out; 
 	wire[11:0] imem_in;
 	input[31:0] imem_out;
-	output[31:0] F_D_out; //FD_PC_out = PC+1 to be sent to next stage
-	wire FD_reset;
+
+	output FD_reset;
 
 	register PC(.clk(clock), .data_in(PC_in), .write_enable(1'b1), .data_out(PC_out), .ctrl_reset(reset));
 	assign imem_in = PC_out[11:0]; //imem read address = bottom 12 bits of PC 
@@ -37,7 +36,7 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	adder_32 PC_adder(.A(PC_out), .B(32'h00000001), .Cin(1'b0), .Sums(PC_incr));
 	
 	
-	//DECODE STAGE: REGFILE AND D/X
+/////DECODE STAGE: REGFILE AND D/X////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//TODO: Test if correct values are read from regfile
 	wire[4:0] rs_addr, rt_addr, regfile_write_addr, regfile_readinput_B, regfile_readinput_A;
 	wire regfile_write_enable;
@@ -90,7 +89,7 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	
 	
 	//_x denotes that these are the values for X stage
-	wire DX_reset;
+	output DX_reset;
 	wire[4:0] alu1_x, sh_x, rd_addr_x;
 	wire[31:0] pc_x,  regA_x, regB_x, imdt_x, tgt_x;
 	output [4:0] op_x;
@@ -102,17 +101,14 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	
 	
 	
-	//EXECUTE STAGE: ALUs, branch logic
+//////EXECUTE STAGE: ALUs, branch logic /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	output br_x, sw_x, jr_x, j_x, jal_x, bne_x, blt_x, bex_x;
+	wire br_x, jr_x, j_x, jal_x, bne_x, blt_x, bex_x;
 	
 	//Current instruction is branch instruction if opcode = 00010 or 00110
 	assign bne_x = (~|op_x[4:2] && op_x[1] && ~op_x[0]); 
 	assign blt_x = (~|op_x[4:3] && &op_x[2:1] && ~op_x[0]);
 	assign br_x = blt_x || bne_x;
-	
-	//Current instruction is sw if opcode = 00111
-	assign sw_x = ~|op_x[4:3] && &op_x[2:0];
 	
 	//Current instruction is jr if opcode = 00100
 	assign jr_x = ~|op_x[4:3] && op_x[2] && ~|op_x[1:0];
@@ -165,8 +161,6 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	ALU ALU1(.data_operandA(regA_x[31:0]), .data_operandB(alu1_inB[31:0]), .ctrl_ALUopcode(alu1_opcode[4:0]), 
 				.ctrl_shiftamt(sh_x[4:0]), .data_result(alu1_out[31:0]), .isNotEqual(alu1_NEQ), .isLessThan(alu1_LT), .overflow(alu1_OF));
 	
-	
-	
 	//X Stage Control 
 	
 	wire take_blt = blt_x && ~alu1_LT && alu1_NEQ;
@@ -174,17 +168,17 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	wire take_branch = take_blt || take_bne;
 	
 	wire take_bex = bex_x && alu1_NEQ;
-	output take_target = j_x || jal_x || take_bex;
+	wire take_target = j_x || jal_x || take_bex;
 	
-	output take_rd = jr_x;
+	wire take_rd = jr_x;
 	
 	
 	//PC_alt will be one of {Branch Target, Target, or RD} .... PC will either be PC_alt or PC_Incr; if take_alt is true, PC will be PC_alt 
-	output [31:0] PC_alt; 
-	output take_alt = take_branch || take_target || take_rd;
+	wire [31:0] PC_alt; 
+	wire take_alt = take_branch || take_target || take_rd;
 	
 	//Flush FD and DX if we branch or jump
-	assign DX_reset = take_alt || reset;
+	//assign DX_reset = take_alt || reset;
 	assign FD_reset = take_alt || reset;
 	
 	//MUX: alt_int = branch target or immediate target
@@ -222,27 +216,42 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	endgenerate
 
 
+	output[31:0] alu1out_M, target_M, regB_M;
+	output[4:0] opcode_M, rd_addr_M;
+	output overflow_M;
 	
+	XM x_m(.op(op_x), .rd(rd_addr_x), .regb(regB_x), .alu(alu1_out), .tgt(tgt_x), .clock(clock), .reset(reset), .of(alu1_OF),
+			 .overflow(overflow_M), .opcode(opcode_M), .rd_addr(rd_addr_M), .regB_data(regB_M), .aluout(alu1out_M), .target(target_M));
 
 	
 	
-	//////////////////////////////////////
-	////// THIS IS REQUIRED FOR GRADING
-	// CHANGE THIS TO ASSIGN YOUR DMEM WRITE ADDRESS ALSO TO debug_addr
-	//assign dmem_address = (12'b000000000001);
-	// CHANGE THIS TO ASSIGN YOUR DMEM DATA INPUT (TO BE WRITTEN) ALSO TO debug_data
-	//assign dmem_data_in = (12'b000000000001);
-	////////////////////////////////////////////////////////////
 	
-		
-	// You'll need to change where the dmem and imem read and write...
-	/*dmem mydmem(	.address	(dmem_address),
-					.clock		(clock),
-					.data		(debug_data),
-					.wren		(1'b1) //,	//need to fix this!
-					//.q			(wherever_you_want) // change where output q goes...
-	);
 	
-	 */
+	
+	
+	
+	////// M STAGE: Memory reads and writes /////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	assign dmem_address = alu1out_M[11:0];
+	assign dmem_data_in = regB_M[31:0];
+	wire[31:0] dmem_out;
+	wire sw_M;
+	assign sw_M = ~|opcode_M[4:3] && &opcode_M[2:0];
+
+	
+	//dmem mydmem(.address	(dmem_address), .clock(clock), .data(debug_data), .wren(sw_M), .q	(dmem_out)); 
+	
+	wire[31:0] aluout_W, target_W, data_W;
+	wire[4:0] opcode_W, rd_addr_W;
+	wire overflow_W;
+	
+	//data, alu, op, rd, tgt, of, clock, reset, data_out, alu_out, opcode, rd_addr, target, overflow
+	MW M_W(.data(dmem_out), .op(opcode_M), .rd(rd_addr_M), .tgt(target_M), .of(overflow_M), .clock(clock), .reset(reset), 
+			 .data_out(data_W), .alu_out(aluout_W), .opcode(opcode_W), .rd_addr(rd_addr_W), .target(target_W), .overflow(overflow_W));
+	
+	
+	//////// W stage: Writing back to regfile ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	
 	
 endmodule
