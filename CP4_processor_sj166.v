@@ -1,5 +1,5 @@
 module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, lcd_data,*/ dmem_data_in, dmem_address, imem_out, 
-									aluout_W, target_W, data_W, pc_W, opcode_W, rd_addr_W, aluop_W, overflow_W, FD_reset, F_D_out, PC_out);
+									aluout_W, target_W, data_W, pc_W, opcode_W, rd_addr_W, aluop_W, overflow_W, F_D_out, PC_out, flush);
 
 	input 			clock, reset/*, ps2_key_pressed*/;
 	//input 	[7:0]	ps2_out;
@@ -15,13 +15,12 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	//TODO: Hook up imem
 	//TODO: Add logic to deal with setx; need to do this in all stages
 	
-	wire[31:0] PC_in, PC_incr;
+	wire[31:0] PC_in, PC_incr, FD_in;
 	output[31:0] PC_out;
 	output[31:0] F_D_out; 
 	wire[11:0] imem_in;
 	input[31:0] imem_out;
-
-	output FD_reset;
+	output flush;
 
 	register PC(.clk(clock), .data_in(PC_in), .write_enable(1'b1), .data_out(PC_out), .ctrl_reset(reset));
 	assign imem_in = PC_out[11:0]; //imem read address = bottom 12 bits of PC 
@@ -32,12 +31,14 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 					//.q			(imem_out) // change where output q goes...
 	//);
 	
-	register F_D(.clk(clock), .data_in(imem_out), .write_enable(1'b1), .data_out(F_D_out));
+	assign FD_in = flush ? 32'h00000000 : imem_out;
+	register F_D(.clk(clock), .data_in(FD_in), .write_enable(1'b1), .data_out(F_D_out), .ctrl_reset(reset));
 	
 	adder_32 PC_adder(.A(PC_out), .B(32'h00000001), .Cin(1'b0), .Sums(PC_incr));
 	
 	
 /////DECODE STAGE: REGFILE AND D/X////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
 	//TODO: Test if correct values are read from regfile
 	wire[4:0] rs_addr, rt_addr, regfile_write_addr, regfile_readinput_B, regfile_readinput_A;
 	wire regfile_write_enable, rs_write;
@@ -92,14 +93,13 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	
 	
 	//_x denotes that these are the values for X stage
-	wire DX_reset;
 	wire[4:0] alu1_x, sh_x, rd_addr_x;
 	wire[31:0] pc_x,  regA_x, regB_x, imdt_x, tgt_x;
 	wire [4:0] op_x;
 	
-	DX d_x(.op(F_D_out[31:27]), .pc(PC_incr[31:0]), .alu(F_D_out[6:2]), .sh(F_D_out[11:7]), .a(regread_A[31:0]), .b(regread_B[31:0]), 
+	DX d_x(.op(F_D_out[31:27]), .pc(PC_incr[31:0]), .alu(F_D_out[6:2]), .sh(F_D_out[11:7]), .a(regread_A[31:0]), .b(regread_B[31:0]), .flush(flush), 
 			 .imdt(F_D_out[16:0]), .t(F_D_out[26:0]), .rd_addr(F_D_out[26:22]), .clock(clock), 
-			 .DX_reset(DX_reset), .opcode(op_x[4:0]), .PCplusone(pc_x[31:0]), .ALUopcode(alu1_x[4:0]), .shamt(sh_x[4:0]), .regA(regA_x[31:0]), 
+			 .DX_reset(reset), .opcode(op_x[4:0]), .PCplusone(pc_x[31:0]), .ALUopcode(alu1_x[4:0]), .shamt(sh_x[4:0]), .regA(regA_x[31:0]), 
 			 .regB(regB_x[31:0]), .immediate(imdt_x[31:0]), .target(tgt_x[31:0]), .rd_address(rd_addr_x[4:0]));
 	
 	
@@ -180,9 +180,7 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	wire [31:0] PC_alt; 
 	wire take_alt = take_branch || take_target || take_rd;
 	
-	//Flush FD and DX if we branch or jump
-	//assign DX_reset = take_alt || reset;
-	assign FD_reset = take_alt || reset;
+	assign flush = take_alt;
 	
 	//MUX: alt_int = branch target or immediate target
 	wire[31:0] alt_int;
