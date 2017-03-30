@@ -1,5 +1,5 @@
 module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, lcd_data,*/ dmem_data_in, dmem_address, imem_out, 
-								   alu1out_M, target_M, regB_M, opcode_M, rd_addr_M, overflow_M, op_x, F_D_out, FD_reset, DX_reset);
+									aluout_W, target_W, data_W, pc_W, opcode_W, rd_addr_W, aluop_W, overflow_W, FD_reset, F_D_out, PC_out);
 
 	input 			clock, reset/*, ps2_key_pressed*/;
 	//input 	[7:0]	ps2_out;
@@ -15,7 +15,8 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	//TODO: Hook up imem
 	//TODO: Add logic to deal with setx; need to do this in all stages
 	
-	wire[31:0] PC_in, PC_incr, PC_out;
+	wire[31:0] PC_in, PC_incr;
+	output[31:0] PC_out;
 	output[31:0] F_D_out; 
 	wire[11:0] imem_in;
 	input[31:0] imem_out;
@@ -31,7 +32,7 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 					//.q			(imem_out) // change where output q goes...
 	//);
 	
-	register F_D(.clk(clock), .data_in(imem_out), .write_enable(1'b1), .data_out(F_D_out), .ctrl_reset(FD_reset));
+	register F_D(.clk(clock), .data_in(imem_out), .write_enable(1'b1), .data_out(F_D_out));
 	
 	adder_32 PC_adder(.A(PC_out), .B(32'h00000001), .Cin(1'b0), .Sums(PC_incr));
 	
@@ -91,10 +92,10 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	
 	
 	//_x denotes that these are the values for X stage
-	output DX_reset;
+	wire DX_reset;
 	wire[4:0] alu1_x, sh_x, rd_addr_x;
 	wire[31:0] pc_x,  regA_x, regB_x, imdt_x, tgt_x;
-	output [4:0] op_x;
+	wire [4:0] op_x;
 	
 	DX d_x(.op(F_D_out[31:27]), .pc(PC_incr[31:0]), .alu(F_D_out[6:2]), .sh(F_D_out[11:7]), .a(regread_A[31:0]), .b(regread_B[31:0]), 
 			 .imdt(F_D_out[16:0]), .t(F_D_out[26:0]), .rd_addr(F_D_out[26:22]), .clock(clock), 
@@ -218,18 +219,15 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	endgenerate
 
 
-	output[31:0] alu1out_M, target_M, regB_M;
-	output[4:0] opcode_M, rd_addr_M;
-	output overflow_M;
+	wire[31:0] alu1out_M, target_M, regB_M, pc_M;
+	wire[4:0] opcode_M, rd_addr_M, aluop_M;
+	wire overflow_M;
 	
-	XM x_m(.op(op_x), .rd(rd_addr_x), .regb(regB_x), .alu(alu1_out), .tgt(tgt_x), .clock(clock), .reset(reset), .of(alu1_OF),
-			 .overflow(overflow_M), .opcode(opcode_M), .rd_addr(rd_addr_M), .regB_data(regB_M), .aluout(alu1out_M), .target(target_M));
+	XM x_m(.op(op_x), .rd(rd_addr_x), .regb(regB_x), .alu(alu1_out), .tgt(tgt_x), .clock(clock), .reset(reset), .of(alu1_OF), .aluop(alu1_opcode), .pc(pc_x),
+			 .overflow(overflow_M), .opcode(opcode_M), .rd_addr(rd_addr_M), .regB_data(regB_M), .aluout(alu1out_M), .target(target_M), .alu_opcode(aluop_M), .pc_out(pc_M));
 
 	
-	
-	
-	
-	
+
 	
 	
 	////// M STAGE: Memory reads and writes /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -243,22 +241,61 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	
 	//dmem mydmem(.address	(dmem_address), .clock(clock), .data(debug_data), .wren(sw_M), .q	(dmem_out)); 
 	
-	wire[31:0] aluout_W, target_W, data_W;
-	wire[4:0] opcode_W, rd_addr_W;
-	wire overflow_W;
+	output[31:0] aluout_W, target_W, data_W, pc_W;
+	output[4:0] opcode_W, rd_addr_W, aluop_W;
+	output overflow_W;
 	
 	//data, alu, op, rd, tgt, of, clock, reset, data_out, alu_out, opcode, rd_addr, target, overflow
-	MW M_W(.data(dmem_out), .op(opcode_M), .rd(rd_addr_M), .tgt(target_M), .of(overflow_M), .clock(clock), .reset(reset), 
-			 .data_out(data_W), .alu_out(aluout_W), .opcode(opcode_W), .rd_addr(rd_addr_W), .target(target_W), .overflow(overflow_W));
+	MW M_W(.data(dmem_out), .alu(alu1out_M), .op(opcode_M), .rd(rd_addr_M), .tgt(target_M), .of(overflow_M), .clock(clock), .reset(reset), .aluop(aluop_M), .pc(pc_M),
+			 .data_out(data_W), .alu_out(aluout_W), .opcode(opcode_W), .rd_addr(rd_addr_W), .target(target_W), .overflow(overflow_W),
+			 .pc_out(pc_W), .alu_opcode(aluop_W));
 	
 	
 	//////// W stage: Writing back to regfile ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
 	
+	//	wire regfile_write_enable, rs_write;
+	//rd_writedata, rs_writeData
+	//regfile_write_addr
+	
+	wire rtype_W = ~|opcode_W[4:0];
+	
+	wire add_W = rtype_W && ~|aluop_W[4:0]; //00000
+	wire sub_W = rtype_W && (~|aluop_W[4:1] && aluop_W[0]); //00001
+	wire mult_W = rtype_W && (~|aluop_W[4:3] && &aluop_W[2:1] && ~aluop_W[0]); //00110
+	wire div_W = rtype_W && (~|aluop_W[4:3] && &aluop_W[2:0]); //00111
+	
+	wire addi_W = ~|opcode_W[4:3] && &opcode_W[2:0]; //00111
+	wire lw_W = ~opcode_W[4] && opcode_W[3] && ~|opcode_W[2:0]; //01000
+	wire itype_W = addi_W || lw_W;
+	
+	wire setx_W = opcode_W[4] && ~opcode_W[3] && opcode_W[2] && ~opcode_W[1] && opcode_W[0];//10101
+	
+	wire jal_W = ~|opcode_W[4:2] && &opcode_W[1:0]; //00011
+	
+	assign regfile_write_enable = rtype_W || itype_W || jal_W; //Do a register file write for every rtype, for addi/lw, and for jal
+	
+	//Write to rstatus for: add, subtract, mult, div, addi, setx	
+	wire overflow_condition = (add_W || sub_W || mult_W || div_W || addi_W) && overflow_W;
+	assign rs_write = overflow_condition || setx_W;
+	
+	// rd_addr for r-type, lw, addi; $31 for jal.
+	assign regfile_write_addr = (rtype_W || lw_W || addi_W) ? rd_addr_W : 5'b11111; 	
 	
 	
+	//Overflow code: 1 for add, 2 for addi, 3 for sub, 4 for mult, 5 for div
+	wire[31:0] overflow_code;
+	assign overflow_code[0] = add_W || sub_W || div_W;
+	assign overflow_code[1] = addi_W || sub_W;
+	assign overflow_code[2] = mult_W || div_W;
 	
+	//target for setx, overflow code otherwise
+	assign rs_writeData = setx_W ? target_W : overflow_code;
 	
+	//rd_writeData: aluout for r-type, addi. data_out for lw. PC+1 for jal. 
+	wire[31:0] int_data;
+	assign int_data = (rtype_W || addi_W) ? aluout_W : data_W;
 	
+	assign rd_writedata = jal_W ? pc_W : int_data;
 	
 endmodule
