@@ -39,14 +39,16 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 /////DECODE STAGE: REGFILE AND D/X////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//TODO: Test if correct values are read from regfile
 	wire[4:0] rs_addr, rt_addr, regfile_write_addr, regfile_readinput_B, regfile_readinput_A;
-	wire regfile_write_enable;
+	wire regfile_write_enable, rs_write;
 	wire branch_indicator, sw_indicator, jr_indicator, bex_indicator, blt_indicator, bne_indicator;
-	wire[31:0] regread_A, regread_B, rd_writedata;
+	wire[31:0] regread_A, regread_B, rd_writedata, rs_writeData;
 	wire[4:0] rstatus_addr = 5'b11110; //rstatus = 30
 	
+	
 	//A = rs or rstatus if it's a bex, B = rt, or rd if it's a branch or a sw or a jr
-	regfile reg_file(.clock(clock), .ctrl_writeEnable(regfile_write_enable), .ctrl_reset(reset), .ctrl_writeReg(regfile_write_addr), 
-						  .ctrl_readRegA(regfile_readinput_A[4:0]), .ctrl_readRegB(regfile_readinput_B[4:0]), .data_writeReg(rd_writedata[31:0]), 
+	regfile_mod reg_file(.clock(clock), .ctrl_writeEnable(regfile_write_enable), .ctrl_reset(reset), .ctrl_writeReg(regfile_write_addr), 
+						  .ctrl_readRegA(regfile_readinput_A[4:0]), .ctrl_readRegB(regfile_readinput_B[4:0]), .data_writeReg(rd_writedata[31:0]),
+						  .rs_write(rs_write), .rs_writeData(rs_writeData), 
 						  .data_readRegA(regread_A[31:0]), .data_readRegB(regread_B[31:0]));
 	
 	//Current instruction is branch instruction if opcode = 00010 or 00110
@@ -251,6 +253,11 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	
 	
 	//////// W stage: Writing back to regfile ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	
+	
+	
+	
 	
 	
 	
