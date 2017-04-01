@@ -1,5 +1,5 @@
 module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, lcd_data,*/ dmem_data_in, dmem_address, imem_out, 
-									aluout_W, target_W, data_W, pc_W, opcode_W, rd_addr_W, aluop_W, overflow_W, F_D_out, PC_out, flush);
+										regfile_write_enable, rs_write, rd_writedata, rs_writeData, regfile_write_addr, opcode_W, aluout_W);
 
 	input 			clock, reset/*, ps2_key_pressed*/;
 	//input 	[7:0]	ps2_out;
@@ -16,11 +16,11 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	//TODO: Add logic to deal with setx; need to do this in all stages
 	
 	wire[31:0] PC_in, PC_incr, FD_in;
-	output[31:0] PC_out;
-	output[31:0] F_D_out; 
+	wire[31:0] PC_out;
+	wire[31:0] F_D_out; 
 	wire[11:0] imem_in;
 	input[31:0] imem_out;
-	output flush;
+	wire flush;
 
 	register PC(.clk(clock), .data_in(PC_in), .write_enable(1'b1), .data_out(PC_out), .ctrl_reset(reset));
 	assign imem_in = PC_out[11:0]; //imem read address = bottom 12 bits of PC 
@@ -40,12 +40,14 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 /////DECODE STAGE: REGFILE AND D/X////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
 	//TODO: Test if correct values are read from regfile
-	wire[4:0] rs_addr, rt_addr, regfile_write_addr, regfile_readinput_B, regfile_readinput_A;
-	wire regfile_write_enable, rs_write;
+	wire[4:0] rs_addr, rt_addr, regfile_readinput_B, regfile_readinput_A;
+	output[4:0] regfile_write_addr;
+	output regfile_write_enable, rs_write;
 	wire branch_indicator, sw_indicator, jr_indicator, bex_indicator, blt_indicator, bne_indicator;
-	wire[31:0] regread_A, regread_B, rd_writedata, rs_writeData;
+	wire[31:0] regread_A, regread_B;
+   output[31:0]	rd_writedata, rs_writeData;
 	wire[4:0] rstatus_addr = 5'b11110; //rstatus = 30
-	
+
 	
 	//A = rs or rstatus if it's a bex, B = rt, or rd if it's a branch or a sw or a jr
 	regfile_mod reg_file(.clock(clock), .ctrl_writeEnable(regfile_write_enable), .ctrl_reset(reset), .ctrl_writeReg(regfile_write_addr), 
@@ -239,9 +241,11 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	
 	//dmem mydmem(.address	(dmem_address), .clock(clock), .data(debug_data), .wren(sw_M), .q	(dmem_out)); 
 	
-	output[31:0] aluout_W, target_W, data_W, pc_W;
-	output[4:0] opcode_W, rd_addr_W, aluop_W;
-	output overflow_W;
+	wire[31:0] target_W, data_W, pc_W;
+	wire[4:0] rd_addr_W, aluop_W;
+	wire overflow_W;
+	output[4:0] opcode_W;
+	output[31:0] aluout_W;
 	
 	//data, alu, op, rd, tgt, of, clock, reset, data_out, alu_out, opcode, rd_addr, target, overflow
 	MW M_W(.data(dmem_out), .alu(alu1out_M), .op(opcode_M), .rd(rd_addr_M), .tgt(target_M), .of(overflow_M), .clock(clock), .reset(reset), .aluop(aluop_M), .pc(pc_M),
@@ -263,7 +267,7 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	wire mult_W = rtype_W && (~|aluop_W[4:3] && &aluop_W[2:1] && ~aluop_W[0]); //00110
 	wire div_W = rtype_W && (~|aluop_W[4:3] && &aluop_W[2:0]); //00111
 	
-	wire addi_W = ~|opcode_W[4:3] && &opcode_W[2:0]; //00111
+	wire addi_W = ~|opcode_W[4:3] && opcode_W[2] && ~opcode_W[1] && opcode_W[0]; //00101
 	wire lw_W = ~opcode_W[4] && opcode_W[3] && ~|opcode_W[2:0]; //01000
 	wire itype_W = addi_W || lw_W;
 	
