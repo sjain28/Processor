@@ -1,6 +1,7 @@
 module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, lcd_data,*/ dmem_data_in, dmem_address, 
 									opcode_W, regfile_write_addr, regfile_write_enable, rs_write, rd_writedata, rs_writeData, imem_out, flush, sw_M, 
-									dmem_out, PC_out, take_bex);
+									dmem_out, PC_out, take_bex, 
+									multdiv_result, multdiv_ready, multdiv_addr_out);
 
 	input 			clock, reset/*, ps2_key_pressed*/;
 	//input 	[7:0]	ps2_out;
@@ -27,7 +28,7 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	imem myimem(	.address 	(imem_in),
 					.clken		(1'b1),
 					.clock		(~clock), 
-					.q			(imem_out), 
+					.q			(imem_out)
 	);
 	
 	assign FD_in = flush ? 32'h00000000 : imem_out;
@@ -165,6 +166,51 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	ALU ALU1(.data_operandA(regA_x[31:0]), .data_operandB(alu1_inB[31:0]), .ctrl_ALUopcode(alu1_opcode[4:0]), 
 				.ctrl_shiftamt(sh_x[4:0]), .data_result(alu1_out[31:0]), .isNotEqual(alu1_NEQ), .isLessThan(alu1_LT), .overflow(alu1_OF));
 	
+	
+	
+	
+	
+	
+	
+	
+	
+	//Setting up multdiv							 
+	output[31:0] multdiv_result, multdiv_addr_out;
+	output multdiv_ready;
+	
+	wire[31:0] multdiv_addr_in, multdiv_A, multdiv_B;
+	wire multdiv_exception, x_mult, x_div, multdiv_reset;
+	wire[4:0] multdiv_writeAddr;
+	
+	assign multdiv_addr_in[4:0] = rd_addr_x;
+		
+	register multdiv_addr(clock, multdiv_addr_in, x_mult || x_div, multdiv_addr_out, reset);
+	register mdA(~clock, regA_x, x_mult || x_div, multdiv_A, reset);
+	register mdB(~clock, alu1_inB, x_mult || x_div, multdiv_B, reset);
+	
+	assign x_mult = ~|alu1_opcode[4:3] && &alu1_opcode[2:1] && ~alu1_opcode[0]; //mult if alu1_x = 00110
+	assign x_div = ~|alu1_opcode[4:3] && &alu1_opcode[2:0]; //div if 00111
+	
+	multdiv mult_div(multdiv_A, multdiv_B, x_mult, x_div, clock, multdiv_result, multdiv_exception, 
+						  multdiv_ready, multdiv_reset);
+	
+	wire[5:0] counter_outputs;
+	counter33 multdiv_counter(.clock(clock), .reset(x_mult || x_div), .out(counter_outputs));
+	
+	//Reset multdiv when counter = 33
+	assign multdiv_reset = counter_outputs[5] && ~|counter_outputs[4:1] && counter_outputs[0];
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	//X Stage Control 
 	
 	wire take_blt = blt_x && ~alu1_LT && alu1_NEQ;
@@ -266,6 +312,8 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	wire mult_W = rtype_W && (~|aluop_W[4:3] && &aluop_W[2:1] && ~aluop_W[0]); //00110
 	wire div_W = rtype_W && (~|aluop_W[4:3] && &aluop_W[2:0]); //00111
 	
+	wire rtype_regular = rtype_W && ~mult_W && ~div_W; //"regular" rtype = not mult or div
+	
 	wire addi_W = ~|opcode_W[4:3] && opcode_W[2] && ~opcode_W[1] && opcode_W[0]; //00101
 	wire lw_W = ~opcode_W[4] && opcode_W[3] && ~|opcode_W[2:0]; //01000
 	wire itype_W = addi_W || lw_W;
@@ -274,17 +322,22 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	
 	wire jal_W = ~|opcode_W[4:2] && &opcode_W[1:0]; //00011
 	
-	assign regfile_write_enable = rtype_W || itype_W || jal_W; //Do a register file write for every rtype, for addi/lw, and for jal
+	//wire[31:0] multdiv_result;
+	//wire multdiv_exception, multdiv_ready;
+	//wire [4:0] multdiv_writeAddr
+	
+	//Do a register file write for regular rtypes, itypes, jal, and whenever multdiv is ready
+	assign regfile_write_enable = rtype_regular || itype_W || jal_W || multdiv_ready; 
 	
 	//Write to rstatus for: add, subtract, mult, div, addi, setx	
-	wire overflow_condition = (add_W || sub_W || mult_W || div_W || addi_W) && overflow_W;
+	wire overflow_condition = ((add_W || sub_W || addi_W) && overflow_W) || (multdiv_ready && multdiv_exception);
 	assign rs_write = overflow_condition || setx_W;
 	
 	// rd_addr for r-type, lw, addi; $31 for jal.
-	assign regfile_write_addr = (rtype_W || lw_W || addi_W) ? rd_addr_W : 5'b11111; 	
+	wire[4:0] regfile_write_addr_int = (rtype_W || lw_W || addi_W) ? rd_addr_W : 5'b11111; 	
+	assign regfile_write_addr = multdiv_ready ? multdiv_addr_out[4:0] : regfile_write_addr_int;
 	
-	
-	//Overflow code: 1 for add, 2 for addi, 3 for sub, 4 for mult, 5 for div
+	//Overflow code: 1 for add, 2 for addi, 3 for sub, 4 for mult, 5 for div: WONT WORK FOR MULT DIV 
 	wire[31:0] overflow_code;
 	assign overflow_code[0] = add_W || sub_W || div_W;
 	assign overflow_code[1] = addi_W || sub_W;
@@ -293,10 +346,14 @@ module CP4_processor_sj166(clock, reset, /*ps2_key_pressed, ps2_out, lcd_write, 
 	//target for setx, overflow code otherwise
 	assign rs_writeData = setx_W ? target_W : overflow_code;
 	
-	//rd_writeData: aluout for r-type, addi. data_out for lw. PC+1 for jal. 
-	wire[31:0] int_data;
-	assign int_data = (rtype_W || addi_W) ? aluout_W : data_W;
+	//rd_writeData: aluout for r-type regular, addi. data_out for lw. PC+1 for jal. multdiv out for multdiv. 
+	wire[31:0] int_data1, int_data2;
+	assign int_data1 = (rtype_W || addi_W) ? aluout_W : data_W;
+	assign int_data2 = multdiv_ready ? multdiv_result : int_data1;
 	
-	assign rd_writedata = jal_W ? pc_W : int_data;
+	assign rd_writedata = jal_W ? pc_W : int_data2;
+	
+	//TODO: 
+	//Fix multdiv overflow codes
 	
 endmodule
