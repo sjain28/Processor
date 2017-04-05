@@ -4,19 +4,19 @@ input clock, reset;
 output [5:0] out;
 reg [5:0] next;
 
-dff dff0(.d(next[0]), .clk(clock), .q(out[0]), .clrn(~reset));
-dff dff1(.d(next[1]), .clk(clock), .q(out[1]), .clrn(~reset));
-dff dff2(.d(next[2]), .clk(clock), .q(out[2]), .clrn(~reset));
-dff dff3(.d(next[3]), .clk(clock), .q(out[3]), .clrn(~reset));
-dff dff4(.d(next[4]), .clk(clock), .q(out[4]), .clrn(~reset));
-dff dff5(.d(next[5]), .clk(clock), .q(out[5]), .clrn(~reset));
+dff dff0(.d(next[0]), .clk(clock), .q(out[0]), .clrn(1'b1));
+dff dff1(.d(next[1]), .clk(clock), .q(out[1]), .clrn(1'b1));
+dff dff2(.d(next[2]), .clk(clock), .q(out[2]), .clrn(1'b1));
+dff dff3(.d(next[3]), .clk(clock), .q(out[3]), .clrn(1'b1));
+dff dff4(.d(next[4]), .clk(clock), .q(out[4]), .clrn(1'b1));
+dff dff5(.d(next[5]), .clk(clock), .q(out[5]), .clrn(1'b1));
 
 
 always@(*) begin
 
 casex({reset, out})
-7'b1xxxxxx: next = 0;
-7'd0: next = 1;
+7'b1xxxxxx: next = 1;
+7'd0: next = 0;
 7'd1: next = 2;
 7'd2: next = 3;
 7'd3: next = 4;
@@ -49,9 +49,7 @@ casex({reset, out})
 7'd30: next = 31;
 7'd31: next = 32;
 7'd32: next = 33;
-7'd33: next = 33;
-
-default: next = 33;
+7'd33: next = 0;
 
 endcase
 end

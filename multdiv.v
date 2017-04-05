@@ -44,11 +44,11 @@ input clock, reset;
 output [4:0] out;
 reg [4:0] next;
 
-dff dff0(.d(next[0]), .clk(clock), .q(out[0]), .clrn(~reset));
-dff dff1(.d(next[1]), .clk(clock), .q(out[1]), .clrn(~reset));
-dff dff2(.d(next[2]), .clk(clock), .q(out[2]), .clrn(~reset));
-dff dff3(.d(next[3]), .clk(clock), .q(out[3]), .clrn(~reset));
-dff dff4(.d(next[4]), .clk(clock), .q(out[4]), .clrn(~reset));
+dff dff0(.d(next[0]), .clk(clock), .q(out[0]), .clrn(1'b1));
+dff dff1(.d(next[1]), .clk(clock), .q(out[1]), .clrn(1'b1));
+dff dff2(.d(next[2]), .clk(clock), .q(out[2]), .clrn(1'b1));
+dff dff3(.d(next[3]), .clk(clock), .q(out[3]), .clrn(1'b1));
+dff dff4(.d(next[4]), .clk(clock), .q(out[4]), .clrn(1'b1));
 
 
 always@(*) begin
@@ -85,12 +85,12 @@ input clock, reset;
 output [5:0] out;
 reg [5:0] next;
 
-dff dff0(.d(next[0]), .clk(clock), .q(out[0]), .clrn(~reset));
-dff dff1(.d(next[1]), .clk(clock), .q(out[1]), .clrn(~reset));
-dff dff2(.d(next[2]), .clk(clock), .q(out[2]), .clrn(~reset));
-dff dff3(.d(next[3]), .clk(clock), .q(out[3]), .clrn(~reset));
-dff dff4(.d(next[4]), .clk(clock), .q(out[4]), .clrn(~reset));
-dff dff5(.d(next[5]), .clk(clock), .q(out[5]), .clrn(~reset));
+dff dff0(.d(next[0]), .clk(clock), .q(out[0]), .clrn(1'b1));
+dff dff1(.d(next[1]), .clk(clock), .q(out[1]), .clrn(1'b1));
+dff dff2(.d(next[2]), .clk(clock), .q(out[2]), .clrn(1'b1));
+dff dff3(.d(next[3]), .clk(clock), .q(out[3]), .clrn(1'b1));
+dff dff4(.d(next[4]), .clk(clock), .q(out[4]), .clrn(1'b1));
+dff dff5(.d(next[5]), .clk(clock), .q(out[5]), .clrn(1'b1));
 
 
 always@(*) begin
